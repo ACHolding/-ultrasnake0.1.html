@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cat Pong 1.0</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #091327;
+    color: white;
+    font-family: Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .game { text-align: center; width: 95%; }
+  h1 { color: #55baff; }
+  canvas {
+    width: 100%;
+    max-width: 800px;
+    background: #050914;
+    border: 3px solid #55baff;
+    border-radius: 8px;
+  }
+  button {
+    padding: 12px 24px;
+    margin: 12px;
+    background: #1479da;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="game">
+  <h1>🐱 CAT PONG 1.0 🏓</h1>
+  <canvas id="pong" width="800" height="500"></canvas>
+  <p>W / S or ↑ / ↓ to move | Space to pause</p>
+  <button onclick="restart()">Restart Game</button>
+  <p>© AC Kondo 1999–2026</p>
+</div>
+
+<script>
+const canvas = document.getElementById("pong");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+
+const paddleW = 14, paddleH = 90;
+const player = { x: 25, y: 205, score: 0 };
+const ai = { x: W - 39, y: 205, score: 0 };
+const ball = { x: W/2, y: H/2, vx: 5, vy: 3, r: 9 };
+
+let keys = {};
+let paused = false;
+let lastTime = 0;
+
+document.addEventListener("keydown", e => {
+  if (["ArrowUp","ArrowDown","Space"].includes(e.code))
+    e.preventDefault();
+  keys[e.code] = true;
+  if (e.code === "Space" && !e.repeat)
+    paused = !paused;
+});
+
+document.addEventListener("keyup", e => {
+  keys[e.code] = false;
+});
+
+function resetBall(direction) {
+  ball.x = W / 2;
+  ball.y = H / 2;
+  ball.vx = direction * 5;
+  ball.vy = (Math.random() * 4 - 2) || 2;
+}
+
+function restart() {
+  player.score = 0;
+  ai.score = 0;
+  player.y = ai.y = (H - paddleH) / 2;
+  paused = false;
+  resetBall(Math.random() < 0.5 ? 1 : -1);
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function update(dt) {
+  const speed = 7 * dt;
+
+  if (keys.KeyW || keys.ArrowUp) player.y -= speed;
+  if (keys.KeyS || keys.ArrowDown) player.y += speed;
+
+  player.y = clamp(player.y, 0, H - paddleH);
+
+  // Computer opponent
+  const target = ball.y - paddleH / 2;
+  const movement = clamp(target - ai.y, -4.2*dt, 4.2*dt);
+  ai.y = clamp(ai.y + movement, 0, H - paddleH);
+
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+
+  if (ball.y - ball.r <= 0) {
+    ball.y = ball.r;
+    ball.vy = Math.abs(ball.vy);
+  }
+  if (ball.y + ball.r >= H) {
+    ball.y = H - ball.r;
+    ball.vy = -Math.abs(ball.vy);
+  }
+
+  for (const p of [player, ai]) {
+    if (
+      ball.x + ball.r > p.x &&
+      ball.x - ball.r < p.x + paddleW &&
+      ball.y + ball.r > p.y &&
+      ball.y - ball.r < p.y + paddleH
+    ) {
+      const direction = p === player ? 1 : -1;
+      if (ball.vx * direction < 0) {
+        const hit = (ball.y - (p.y + paddleH/2)) / (paddleH/2);
+        const nextSpeed = Math.min(Math.abs(ball.vx) + 0.3, 11);
+        ball.vx = direction * nextSpeed;
+        ball.vy = hit * 6;
+        ball.x = direction === 1
+          ? p.x + paddleW + ball.r
+          : p.x - ball.r;
+      }
+    }
+  }
+
+  if (ball.x < -ball.r) {
+    ai.score++;
+    resetBall(1);
+  }
+  if (ball.x > W + ball.r) {
+    player.score++;
+    resetBall(-1);
+  }
+}
+
+function draw() {
+  ctx.fillStyle = "#050914";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = "#344968";
+  ctx.setLineDash([12, 12]);
+  ctx.beginPath();
+  ctx.moveTo(W/2, 0);
+  ctx.lineTo(W/2, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 48px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(player.score, W/2 - 100, 65);
+  ctx.fillText(ai.score, W/2 + 100, 65);
+
+  ctx.fillStyle = "#55baff";
+  ctx.fillRect(player.x, player.y, paddleW, paddleH);
+
+  ctx.fillStyle = "#ff6b91";
+  ctx.fillRect(ai.x, ai.y, paddleW, paddleH);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+  ctx.fill();
+
+  if (paused) {
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "white";
+    ctx.font = "bold 40px Arial";
+    ctx.fillText("PAUSED", W/2, H/2);
+  }
+}
+
+function loop(timestamp) {
+  const dt = lastTime
+    ? Math.min((timestamp - lastTime) / (1000/60), 2)
+    : 1;
+  lastTime = timestamp;
+
+  if (!paused) update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
